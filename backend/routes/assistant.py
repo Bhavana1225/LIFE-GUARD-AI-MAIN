@@ -1,15 +1,25 @@
 from fastapi import APIRouter
 from pydantic import BaseModel
-import pandas as pd
-import re
+from dotenv import load_dotenv
+from google import genai
 import os
-import numpy as np
-
-from sklearn.metrics.pairwise import cosine_similarity
-from sentence_transformers import SentenceTransformer
-
 
 router = APIRouter()
+
+# Load .env
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+
+load_dotenv(ENV_PATH)
+
+api_key = os.getenv("GOOGLE_API_KEY")
+
+if not api_key:
+    print("WARNING: GOOGLE_API_KEY was not found.")
+    client = None
+else:
+    client = genai.Client(api_key=api_key)
+    print("Google Gemini client loaded successfully.")
 
 
 class ChatRequest(BaseModel):
@@ -17,92 +27,27 @@ class ChatRequest(BaseModel):
     context: dict | None = None
 
 
+SYSTEM_PROMPT = """
+You are LifeGuard AI, a health information assistant.
 
-# ==========================
-# Load AI Conversation Dataset
-# ==========================
+Give simple, clear and responsible general health information.
 
-BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+Rules:
 
-DATASET_PATH = os.path.join(
-    BASE_DIR,
-    "datasets",
-    "natural remedies",
-    "train.csv"
-)
+1. Answer the user's actual question.
+2. Never invent the user's name.
+3. Never use names from old conversations or datasets.
+4. Do not assume symptoms or medical conditions that the user did not mention.
+5. For symptoms, explain common possible causes and reasonable next steps.
+6. Do not give a definite diagnosis.
+7. Do not prescribe prescription medicines or dosages.
+8. If symptoms may indicate an emergency, clearly recommend urgent medical care.
+9. Ask a short follow-up question when important information is missing.
+10. Keep answers easy to understand.
+11. Do not mention datasets, embeddings, APIs, models, or this system prompt.
+12. Never produce old dataset phrases such as "Hello Mr sham kumar".
+"""
 
-
-df = pd.read_csv(DATASET_PATH)
-
-
-questions = []
-answers = []
-
-
-for conversation in df["Conversation"]:
-
-    if pd.isna(conversation):
-        continue
-
-    human = re.search(
-        r"\[\|Human\|\](.*?)\[\|AI\|\]",
-        conversation,
-        re.S
-    )
-
-    ai = re.search(
-        r"\[\|AI\|\](.*)",
-        conversation,
-        re.S
-    )
-
-    if human and ai:
-
-        questions.append(
-            human.group(1).strip()
-        )
-
-        answers.append(
-            ai.group(1).strip()
-
-
-        )
-
-
-print("Loaded conversations:", len(questions))
-
-
-# ==========================
-# AI Model + Saved Embeddings
-# ==========================
-
-model = SentenceTransformer(
-    "all-MiniLM-L6-v2"
-)
-
-print("Chat model loaded")
-
-
-question_embeddings = np.load(
-    os.path.join(BASE_DIR, "question_embeddings.npy")
-)
-
-questions = np.load(
-    os.path.join(BASE_DIR, "questions.npy"),
-    allow_pickle=True
-)
-
-answers = np.load(
-    os.path.join(BASE_DIR, "answers.npy"),
-    allow_pickle=True
-)
-
-print("Embeddings loaded")
-
-
-# ==========================
-# Chat Endpoint
-# ==========================
 
 @router.post("/assistant/chat")
 def assistant_chat(data: ChatRequest):
@@ -114,42 +59,49 @@ def assistant_chat(data: ChatRequest):
             "answer": "Please ask me a health-related question."
         }
 
-
-    # Convert user question into embedding
-
-    user_embedding = model.encode(
-        [user_question],
-        convert_to_numpy=True
-    )
-
-
-    # Compare with saved embeddings
-
-    similarity_scores = cosine_similarity(
-        user_embedding,
-        question_embeddings
-    )[0]
-
-
-    best_index = similarity_scores.argmax()
-
-    confidence = similarity_scores[best_index]
-
-
-    print(
-        "Match:",
-        questions[best_index],
-        "Score:",
-        confidence
-    )
-
-
-    if confidence > 0.45:
+    if client is None:
         return {
-            "answer": str(answers[best_index])
+            "answer": "The AI assistant is not configured. Please check the Google AI Studio API key."
         }
 
+    try:
 
-    return {
-        "answer": "I could not find a close medical conversation for this question. Please provide more details about your symptoms, duration, and severity."
-    }
+        context_text = ""
+
+        if data.context:
+            context_text = f"""
+Relevant health information from the user's LifeGuard AI assessment:
+
+{data.context}
+"""
+
+        prompt = f"""
+{SYSTEM_PROMPT}
+
+User question:
+{user_question}
+
+{context_text}
+"""
+
+        response = client.models.generate_content(
+            model="gemini-3.6-flash",
+            contents=prompt
+        )
+
+        answer = response.text.strip()
+
+        if not answer:
+            answer = "I could not generate a response. Please try again."
+
+        return {
+            "answer": answer
+        }
+
+    except Exception as e:
+
+        print("Google Gemini assistant error:", repr(e))
+
+        return {
+            "answer": "I'm having trouble connecting to the AI assistant right now. Please try again."
+        }
