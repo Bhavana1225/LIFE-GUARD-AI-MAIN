@@ -1,0 +1,88 @@
+# =========================
+# FRONTEND
+# =========================
+
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.development
+frontend/.env.production
+
+
+# =========================
+# BACKEND - PYTHON
+# =========================
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.venv/
+venv/
+env/
+ENV/
+
+
+# =========================
+# ENVIRONMENT VARIABLES
+# =========================
+
+.env
+.env.local
+.env.development
+.env.production
+
+
+# =========================
+# IDE / EDITOR
+# =========================
+
+.vscode/
+.idea/
+
+
+# =========================
+# OPERATING SYSTEM
+# =========================
+
+.DS_Store
+Thumbs.db
+
+
+# =========================
+# PYTHON GENERATED FILES
+# =========================
+
+*.log
+
+
+# =========================
+# JUPYTER
+# =========================
+
+.ipynb_checkpoints/
+
+
+# =========================
+# MACHINE LEARNING GENERATED FILES
+# =========================
+
+*.npy
+*.npz
+
+
+# =========================
+# TEMPORARY FILES
+# =========================
+
+*.tmp
+*.temp
+# Large generated AI files
+backend/question_embeddings.npy
+backend/answers.npy
+backend/questions.npy
+
+# Large training dataset
+backend/datasets/natural remedies/train.csv
